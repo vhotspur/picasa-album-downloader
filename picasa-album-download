@@ -1,0 +1,84 @@
+#!/bin/sh
+
+#
+# Copyright (c) 2012 Vojtech Horky
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# - Redistributions of source code must retain the above copyright
+#   notice, this list of conditions and the following disclaimer.
+# - Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in the
+#   documentation and/or other materials provided with the distribution.
+# - The name of the author may not be used to endorse or promote products
+#   derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+
+# Script greatly inspired by 
+# https://code.google.com/p/download-picasa-album/
+
+
+run_echo() {
+	echo "[run]" "$@" >&2
+	"$@"
+}
+
+usage() {
+	echo "Usage: $1 <RSS feed URL of Picasa web album>"
+}
+
+
+RSS_URL="$1"
+if [ -z "$RSS_URL" ]; then
+	usage "$0"
+	exit 1
+fi
+
+XMLSTARLET=`which xmlstarlet`
+[ -z "$XMLSTARLET" ] && exit 2
+
+WGET=`which wget`
+[ -z "$WGET" ] && exit 2
+
+RUN="run_echo"
+RUN=""
+
+if [ -f "$RSS_URL" ]; then
+	RSS_FILE="$RSS_URL"
+	REMOVE_RSS_FILE=false
+else
+	RSS_FILE="album.rss.$$.xml"
+	$RUN $WGET -nv -O "$RSS_FILE" "$RSS_URL" || exit 2
+	REMOVE_RSS_FILE=true
+fi
+
+$RUN $XMLSTARLET sel -N media='http://search.yahoo.com/mrss/' \
+	-t -m '//media:content' -v @url -n "$RSS_FILE" \
+	| while read PHOTO_URL; do
+		PHOTO_DIR="`dirname \"$PHOTO_URL\"`"
+		PHOTO_NAME="`basename \"$PHOTO_URL\"`"
+		[ -z "$PHOTO_NAME" ] && continue
+		[ -z "$PHOTO_DIR" ] && continue
+		DOWNLOAD_URL="$PHOTO_DIR/d/$PHOTO_NAME"
+		$RUN $WGET -nv -c -t 0 -O "$PHOTO_NAME" "$DOWNLOAD_URL"
+done
+
+if $REMOVE_RSS_FILE; then
+	rm -f "$RSS_FILE"
+fi
+
